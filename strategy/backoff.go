@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Backoff implements Interface for exponential-backoff
+// Backoff implements strategy.Interface for exponential-backoff
 // it starts from 100ms and goes in steps with last * math.Pow(factor, attempt)
 // optional jitter randomize intervals a little bit.
 type Backoff struct {

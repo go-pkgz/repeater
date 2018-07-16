@@ -4,7 +4,7 @@ package strategy
 
 import "context"
 
-// Interface for repeats strategy. Returns channel with ticks
+// Interface for repeater strategy. Returns channel with ticks
 type Interface interface {
 	Start(ctx context.Context) chan struct{}
 }

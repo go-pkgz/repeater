@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// FixedDelay implements Interface for fixed intervals up to max repeats
+// FixedDelay implements strategy.Interface for fixed intervals up to max repeats
 type FixedDelay struct {
 	repeats int
 	delay   time.Duration
