@@ -47,6 +47,41 @@ func TestRepeatFixed(t *testing.T) {
 	assert.Equal(t, 5, called, "called 5 time")
 }
 
+func TestRepeatFixedFailed(t *testing.T) {
+	e := errors.New("some error")
+	called := 0
+	fun := func() error {
+		called++
+		return e
+	}
+
+	err := NewDefault(10, time.Millisecond).Do(fun)
+	assert.Equal(t, e, err)
+	assert.Equal(t, 10, called, "called 10 times")
+
+	called = 0
+	err = NewDefault(1, time.Millisecond).Do(fun)
+	assert.Equal(t, e, err)
+	assert.Equal(t, 1, called, "called 1 times")
+}
+
+func TestRepeatFixedCriticalError(t *testing.T) {
+	criticalErr := errors.New("critical error")
+
+	called := 0
+	fun := func() error {
+		called++
+		if called == 5 {
+			return criticalErr
+		}
+		return errors.New("some error")
+	}
+
+	err := NewDefault(10, time.Millisecond).Do(fun, criticalErr)
+	assert.Equal(t, criticalErr, err)
+	assert.Equal(t, 5, called, "called 5 times")
+}
+
 func TestRepeatBackoff(t *testing.T) {
 	e := errors.New("some error")
 	called := 0
@@ -68,7 +103,7 @@ func TestRepeatBackoff(t *testing.T) {
 		fmt.Sprintf("took %s", time.Since(st)))
 }
 
-func TestRepeatFailed(t *testing.T) {
+func TestRepeatBackoffFailed(t *testing.T) {
 	e := errors.New("some error")
 	called := 0
 	fun := func() error {
@@ -76,15 +111,14 @@ func TestRepeatFailed(t *testing.T) {
 		return e
 	}
 
-	err := NewDefault(10, time.Millisecond).Do(fun)
+	err := New(strategy.NewBackoff(5, 2, true)).Do(fun)
 	assert.Equal(t, e, err)
-	assert.Equal(t, 10, called, "called 10 times")
+	assert.Equal(t, 5, called, "called 5 times")
 
 	called = 0
-	err = NewDefault(1, time.Millisecond).Do(fun)
+	err = New(strategy.NewBackoff(1, 2, true)).Do(fun)
 	assert.Equal(t, e, err)
 	assert.Equal(t, 1, called, "called 1 times")
-
 }
 
 func TestRepeatOnce(t *testing.T) {
