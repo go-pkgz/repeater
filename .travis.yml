@@ -8,7 +8,6 @@ go_import_path: github.com/go-pkgz/repeater
 services: mongodb
 
 before_install:
-  - cp -rf .vendor vendor
   - go get github.com/mattn/goveralls
   - go get gopkg.in/alecthomas/gometalinter.v2
   - $GOPATH/bin/gometalinter.v2 --install
