@@ -1,4 +1,4 @@
-# Repeater [![Build Status](https://travis-ci.org/go-pkgz/repeater.svg?branch=master)](https://travis-ci.org/go-pkgz/repeater) [![Coverage Status](https://coveralls.io/repos/github/go-pkgz/repeater/badge.svg?branch=master)](https://coveralls.io/github/go-pkgz/repeater?branch=master)
+# Repeater [![Build Status](https://travis-ci.org/go-pkgz/repeater.svg?branch=master)](https://travis-ci.org/go-pkgz/repeater) [![Go Report Card](https://goreportcard.com/badge/github.com/go-pkgz/repeater)](https://goreportcard.com/report/github.com/go-pkgz/repeater) [![Coverage Status](https://coveralls.io/repos/github/go-pkgz/repeater/badge.svg?branch=master)](https://coveralls.io/github/go-pkgz/repeater?branch=master)
 
 Repeater calls a function until it returns no error, up to some number of iterations and delays defined by strategy. It terminates immediately on err from the provided (optional) list of critical errors.
 
