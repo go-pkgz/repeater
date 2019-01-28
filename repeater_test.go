@@ -1,11 +1,11 @@
 package repeater
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
-
-	"errors"
 
 	"github.com/go-pkgz/repeater/strategy"
 	"github.com/stretchr/testify/assert"
@@ -22,27 +22,27 @@ func TestRepeatFixed(t *testing.T) {
 		return e
 	}
 
-	err := NewDefault(10, time.Millisecond).Do(fun)
+	err := NewDefault(10, time.Millisecond).Do(context.Background(), fun)
 	assert.Nil(t, err, "should be ok")
 	assert.Equal(t, 5, called, "called 5 times")
 
 	called = 0
-	err = NewDefault(4, time.Millisecond).Do(fun)
+	err = NewDefault(4, time.Millisecond).Do(context.Background(), fun)
 	assert.NotNil(t, err, "should be err")
 	assert.Equal(t, 4, called, "called 4 times")
 
 	called = 0
-	err = NewDefault(0, time.Millisecond).Do(fun)
+	err = NewDefault(0, time.Millisecond).Do(context.Background(), fun)
 	assert.NotNil(t, err, "should be err")
 	assert.Equal(t, 1, called, "called 1 time")
 
 	called = 0
-	err = NewDefault(5, time.Millisecond).Do(fun, e)
+	err = NewDefault(5, time.Millisecond).Do(context.Background(), fun, e)
 	assert.NotNil(t, err, "should be err, fail on e right away")
 	assert.Equal(t, 1, called, "called 1 time")
 
 	called = 0
-	err = NewDefault(5, time.Millisecond).Do(fun, errors.New("unknown error"))
+	err = NewDefault(5, time.Millisecond).Do(context.Background(), fun, errors.New("unknown error"))
 	assert.Nil(t, err, "err not matched to fail-on")
 	assert.Equal(t, 5, called, "called 5 time")
 }
@@ -55,14 +55,30 @@ func TestRepeatFixedFailed(t *testing.T) {
 		return e
 	}
 
-	err := NewDefault(10, time.Millisecond).Do(fun)
+	err := NewDefault(10, time.Millisecond).Do(context.Background(), fun)
 	assert.Equal(t, e, err)
 	assert.Equal(t, 10, called, "called 10 times")
 
 	called = 0
-	err = NewDefault(1, time.Millisecond).Do(fun)
+	err = NewDefault(1, time.Millisecond).Do(context.Background(), fun)
 	assert.Equal(t, e, err)
 	assert.Equal(t, 1, called, "called 1 times")
+}
+
+func TestRepeatFixedCanceled(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*60)
+	defer cancel()
+
+	called := 0
+	fun := func() error {
+		called++
+		return errors.New("some error")
+	}
+
+	err := NewDefault(10, time.Millisecond*50).Do(ctx, fun)
+	assert.EqualError(t, err, "some error")
+	assert.Equal(t, 2, called)
 }
 
 func TestRepeatFixedCriticalError(t *testing.T) {
@@ -77,7 +93,7 @@ func TestRepeatFixedCriticalError(t *testing.T) {
 		return errors.New("some error")
 	}
 
-	err := NewDefault(10, time.Millisecond).Do(fun, criticalErr)
+	err := NewDefault(10, time.Millisecond).Do(context.Background(), fun, criticalErr)
 	assert.Equal(t, criticalErr, err)
 	assert.Equal(t, 5, called, "called 5 times")
 }
@@ -94,7 +110,7 @@ func TestRepeatBackoff(t *testing.T) {
 	}
 
 	st := time.Now()
-	err := New(strategy.NewBackoff(10, 2, false)).Do(fun)
+	err := New(strategy.NewBackoff(10, 2, false)).Do(context.Background(), fun)
 	assert.Nil(t, err, "should be ok")
 	assert.Equal(t, 6, called, "called 5 times")
 
@@ -111,12 +127,12 @@ func TestRepeatBackoffFailed(t *testing.T) {
 		return e
 	}
 
-	err := New(strategy.NewBackoff(5, 2, true)).Do(fun)
+	err := New(strategy.NewBackoff(5, 2, true)).Do(context.Background(), fun)
 	assert.Equal(t, e, err)
 	assert.Equal(t, 5, called, "called 5 times")
 
 	called = 0
-	err = New(strategy.NewBackoff(1, 2, true)).Do(fun)
+	err = New(strategy.NewBackoff(1, 2, true)).Do(context.Background(), fun)
 	assert.Equal(t, e, err)
 	assert.Equal(t, 1, called, "called 1 times")
 }
@@ -129,13 +145,13 @@ func TestRepeatOnce(t *testing.T) {
 		return e
 	}
 
-	err := New(strategy.NewOnce()).Do(fun)
+	err := New(strategy.NewOnce()).Do(context.Background(), fun)
 	assert.Equal(t, e, err)
 	assert.Equal(t, 1, called, "called 1 time")
 
 	called = 0
 	e = nil
-	err = New(strategy.NewOnce()).Do(fun)
+	err = New(strategy.NewOnce()).Do(context.Background(), fun)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, called, "called 1 time")
 }
