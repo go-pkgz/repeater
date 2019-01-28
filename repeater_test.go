@@ -137,6 +137,21 @@ func TestRepeatBackoffFailed(t *testing.T) {
 	assert.Equal(t, 1, called, "called 1 times")
 }
 
+func TestRepeatBackoffCanceled(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*450)
+	defer cancel()
+
+	called := 0
+	fun := func() error {
+		called++
+		return errors.New("some error")
+	}
+
+	err := New(strategy.NewBackoff(5, 2, true)).Do(ctx, fun)
+	assert.EqualError(t, err, "some error")
+	assert.Equal(t, 3, called)
+}
 func TestRepeatOnce(t *testing.T) {
 	e := errors.New("some error")
 	called := 0
