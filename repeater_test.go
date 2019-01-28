@@ -22,10 +22,11 @@ func TestRepeatFixed(t *testing.T) {
 		return e
 	}
 
-	err := NewDefault(10, time.Millisecond).Do(context.Background(), fun)
+	st := time.Now()
+	err := NewDefault(10, time.Millisecond*10).Do(context.Background(), fun)
 	assert.Nil(t, err, "should be ok")
 	assert.Equal(t, 5, called, "called 5 times")
-
+	assert.True(t, time.Since(st) >= 40*time.Millisecond)
 	called = 0
 	err = NewDefault(4, time.Millisecond).Do(context.Background(), fun)
 	assert.NotNil(t, err, "should be err")
@@ -76,9 +77,11 @@ func TestRepeatFixedCanceled(t *testing.T) {
 		return errors.New("some error")
 	}
 
+	st := time.Now()
 	err := NewDefault(10, time.Millisecond*50).Do(ctx, fun)
 	assert.EqualError(t, err, "some error")
 	assert.Equal(t, 2, called)
+	assert.True(t, time.Since(st) >= time.Millisecond*60 && time.Since(st) < time.Millisecond*70)
 }
 
 func TestRepeatFixedCriticalError(t *testing.T) {
