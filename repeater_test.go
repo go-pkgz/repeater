@@ -79,7 +79,7 @@ func TestRepeatFixedCanceled(t *testing.T) {
 
 	st := time.Now()
 	err := NewDefault(10, time.Millisecond*50).Do(ctx, fun)
-	assert.EqualError(t, err, "some error")
+	assert.EqualError(t, err, "context deadline exceeded")
 	assert.Equal(t, 2, called)
 	assert.True(t, time.Since(st) >= time.Millisecond*60 && time.Since(st) < time.Millisecond*70)
 }
@@ -113,7 +113,14 @@ func TestRepeatBackoff(t *testing.T) {
 	}
 
 	st := time.Now()
-	err := New(strategy.NewBackoff(10, 2, false)).Do(context.Background(), fun)
+	strtg := strategy.Backoff{
+		Duration: 100 * time.Millisecond,
+		Repeats:  10,
+		Factor:   2,
+		Jitter:   false,
+	}
+
+	err := New(&strtg).Do(context.Background(), fun)
 	assert.Nil(t, err, "should be ok")
 	assert.Equal(t, 6, called, "called 5 times")
 
@@ -130,12 +137,24 @@ func TestRepeatBackoffFailed(t *testing.T) {
 		return e
 	}
 
-	err := New(strategy.NewBackoff(5, 2, true)).Do(context.Background(), fun)
+	strtg := strategy.Backoff{
+		Duration: 0,
+		Repeats:  5,
+		Factor:   2,
+		Jitter:   true,
+	}
+	err := New(&strtg).Do(context.Background(), fun)
 	assert.Equal(t, e, err)
 	assert.Equal(t, 5, called, "called 5 times")
 
+	strtg = strategy.Backoff{
+		Duration: 100 * time.Millisecond,
+		Repeats:  1,
+		Factor:   2,
+		Jitter:   true,
+	}
 	called = 0
-	err = New(strategy.NewBackoff(1, 2, true)).Do(context.Background(), fun)
+	err = New(&strtg).Do(context.Background(), fun)
 	assert.Equal(t, e, err)
 	assert.Equal(t, 1, called, "called 1 times")
 }
@@ -151,9 +170,16 @@ func TestRepeatBackoffCanceled(t *testing.T) {
 		return errors.New("some error")
 	}
 
-	err := New(strategy.NewBackoff(5, 2, true)).Do(ctx, fun)
-	assert.EqualError(t, err, "some error")
-	assert.Equal(t, 3, called)
+	strtg := strategy.Backoff{
+		Duration: 10 * time.Millisecond,
+		Repeats:  100,
+		Factor:   2,
+		Jitter:   false,
+	}
+
+	err := New(&strtg).Do(ctx, fun)
+	assert.EqualError(t, err, "context deadline exceeded")
+	assert.Equal(t, 6, called)
 }
 func TestRepeatOnce(t *testing.T) {
 	e := errors.New("some error")
