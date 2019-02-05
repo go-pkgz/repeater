@@ -189,13 +189,13 @@ func TestRepeatOnce(t *testing.T) {
 		return e
 	}
 
-	err := New(strategy.NewOnce()).Do(context.Background(), fun)
+	err := New(&strategy.Once{}).Do(context.Background(), fun)
 	assert.Equal(t, e, err)
 	assert.Equal(t, 1, called, "called 1 time")
 
 	called = 0
 	e = nil
-	err = New(strategy.NewOnce()).Do(context.Background(), fun)
+	err = New(&strategy.Once{}).Do(context.Background(), fun)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, called, "called 1 time")
 }
