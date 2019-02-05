@@ -79,7 +79,7 @@ func TestRepeatFixedCanceled(t *testing.T) {
 
 	st := time.Now()
 	err := NewDefault(10, time.Millisecond*50).Do(ctx, fun)
-	assert.EqualError(t, err, "context deadline exceeded")
+	assert.True(t, err.Error() == "context deadline exceeded" || err.Error() == "some error")
 	assert.Equal(t, 2, called)
 	assert.True(t, time.Since(st) >= time.Millisecond*60 && time.Since(st) < time.Millisecond*70)
 }
@@ -178,7 +178,7 @@ func TestRepeatBackoffCanceled(t *testing.T) {
 	}
 
 	err := New(&strtg).Do(ctx, fun)
-	assert.EqualError(t, err, "context deadline exceeded")
+	assert.True(t, err.Error() == "context deadline exceeded" || err.Error() == "some error")
 	assert.Equal(t, 6, called)
 }
 func TestRepeatOnce(t *testing.T) {
