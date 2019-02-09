@@ -122,7 +122,7 @@ func TestRepeatBackoff(t *testing.T) {
 
 	err := New(&strtg).Do(context.Background(), fun)
 	assert.Nil(t, err, "should be ok")
-	assert.Equal(t, 6, called, "called 5 times")
+	assert.Equal(t, 6, called, "called 6 times")
 
 	t.Log(time.Since(st)) // 100 + 100 * 2^1 + 100 * 2^2 + 100 * 2^3 + 100 * 2^4 = 3100
 	assert.True(t, time.Since(st) >= 3100*time.Millisecond && time.Since(st) < 4100*time.Millisecond,
