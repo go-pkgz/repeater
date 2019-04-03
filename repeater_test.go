@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRepeatFixed(t *testing.T) {
+func TestRepeaterFixed(t *testing.T) {
 	e := errors.New("some error")
 	called := 0
 	fun := func() error {
@@ -48,7 +48,7 @@ func TestRepeatFixed(t *testing.T) {
 	assert.Equal(t, 5, called, "called 5 time")
 }
 
-func TestRepeatFixedFailed(t *testing.T) {
+func TestRepeaterFixedFailed(t *testing.T) {
 	e := errors.New("some error")
 	called := 0
 	fun := func() error {
@@ -66,7 +66,7 @@ func TestRepeatFixedFailed(t *testing.T) {
 	assert.Equal(t, 1, called, "called 1 times")
 }
 
-func TestRepeatFixedCanceled(t *testing.T) {
+func TestRepeaterFixedCanceled(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*60)
 	defer cancel()
@@ -84,7 +84,7 @@ func TestRepeatFixedCanceled(t *testing.T) {
 	assert.True(t, time.Since(st) >= time.Millisecond*60 && time.Since(st) < time.Millisecond*70)
 }
 
-func TestRepeatFixedCriticalError(t *testing.T) {
+func TestRepeaterFixedCriticalError(t *testing.T) {
 	criticalErr := errors.New("critical error")
 
 	called := 0
@@ -101,7 +101,7 @@ func TestRepeatFixedCriticalError(t *testing.T) {
 	assert.Equal(t, 5, called, "called 5 times")
 }
 
-func TestRepeatBackoff(t *testing.T) {
+func TestRepeaterBackoff(t *testing.T) {
 	e := errors.New("some error")
 	called := 0
 	fun := func() error {
@@ -129,7 +129,7 @@ func TestRepeatBackoff(t *testing.T) {
 		fmt.Sprintf("took %s", time.Since(st)))
 }
 
-func TestRepeatBackoffFailed(t *testing.T) {
+func TestRepeaterBackoffFailed(t *testing.T) {
 	e := errors.New("some error")
 	called := 0
 	fun := func() error {
@@ -159,7 +159,7 @@ func TestRepeatBackoffFailed(t *testing.T) {
 	assert.Equal(t, 1, called, "called 1 times")
 }
 
-func TestRepeatBackoffCanceled(t *testing.T) {
+func TestRepeaterBackoffCanceled(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*450)
 	defer cancel()
@@ -181,7 +181,7 @@ func TestRepeatBackoffCanceled(t *testing.T) {
 	assert.True(t, err.Error() == "context deadline exceeded" || err.Error() == "some error")
 	assert.Equal(t, 6, called)
 }
-func TestRepeatOnce(t *testing.T) {
+func TestRepeaterOnce(t *testing.T) {
 	e := errors.New("some error")
 	called := 0
 	fun := func() error {
@@ -198,4 +198,22 @@ func TestRepeatOnce(t *testing.T) {
 	err = New(&strategy.Once{}).Do(context.Background(), fun)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, called, "called 1 time")
+}
+
+func TestRepeaterNil(t *testing.T) {
+	e := errors.New("some error")
+	called := 0
+	fun := func() error {
+		called++
+		if called == 5 { // only 5th call returns ok
+			return nil
+		}
+		return e
+	}
+
+	r := New(nil)
+	r.Interface.(*strategy.FixedDelay).Delay = 10 * time.Millisecond
+	err := r.Do(context.Background(), fun)
+	assert.Nil(t, err, "should be ok")
+	assert.Equal(t, 5, called, "called 5 times")
 }
