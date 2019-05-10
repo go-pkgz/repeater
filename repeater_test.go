@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-pkgz/repeater/strategy"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/go-pkgz/repeater/strategy"
 )
 
 func TestRepeaterFixed(t *testing.T) {
@@ -79,6 +81,7 @@ func TestRepeaterFixedCanceled(t *testing.T) {
 
 	st := time.Now()
 	err := NewDefault(10, time.Millisecond*50).Do(ctx, fun)
+	require.NotNil(t, err)
 	assert.True(t, err.Error() == "context deadline exceeded" || err.Error() == "some error")
 	assert.Equal(t, 2, called)
 	assert.True(t, time.Since(st) >= time.Millisecond*60 && time.Since(st) < time.Millisecond*70)
@@ -178,6 +181,7 @@ func TestRepeaterBackoffCanceled(t *testing.T) {
 	}
 
 	err := New(&strtg).Do(ctx, fun)
+	require.NotNil(t, err)
 	assert.True(t, err.Error() == "context deadline exceeded" || err.Error() == "some error")
 	assert.Equal(t, 6, called)
 }

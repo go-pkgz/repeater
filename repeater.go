@@ -57,7 +57,7 @@ func (r Repeater) Do(ctx context.Context, fun func() error, errors ...error) (er
 			if err = fun(); err == nil {
 				return nil
 			}
-			if err != nil && inErrors(err) { //terminate on critical error from provided list
+			if err != nil && inErrors(err) { // terminate on critical error from provided list
 				return err
 			}
 		}
