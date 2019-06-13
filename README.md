@@ -28,7 +28,5 @@ Returned channels used as "ticks," i.e., for each repeat or initial operation on
 
 Three most common strategies provided by package and ready to use:
 1. **Fixed delay**, up to max number of attempts. It is the default strategy used by `repeater.NewDefault` constructor
-2. **BackOff** with jitter provides exponential backoff. It starts from `Duration` interval and goes in steps with `last * math.Pow(factor, attempt)`. Optional jitter randomizes intervals a little bit. The strategy created by `NewBackoff(repeats int, factor float64, jitter bool)`. _Factor = 1 effectively makes this strategy fixed with `Duration` delay._ 
+2. **BackOff** with jitter provides exponential backoff. It starts from `Duration` interval and goes in steps with `last * math.Pow(factor, attempt)`. Optional jitter randomizes intervals a little bit. _Factor = 1 effectively makes this strategy fixed with `Duration` delay._ 
 3. **Once** strategy does not do any repeats and mainly used for tests/mocks`
-
-
