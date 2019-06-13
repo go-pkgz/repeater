@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"testing"
 	"time"
 
@@ -220,4 +221,62 @@ func TestRepeaterNil(t *testing.T) {
 	err := r.Do(context.Background(), fun)
 	assert.Nil(t, err, "should be ok")
 	assert.Equal(t, 5, called, "called 5 times")
+}
+
+func TestRepeaterMemoryLeakFixed(t *testing.T) {
+
+	rep := func() {
+		called := 0
+		fun := func() error {
+			time.Sleep(5 * time.Millisecond) // simulate slow call
+			called++
+			if called == 5 { // only 5th call returns ok
+				return nil
+			}
+			return errors.New("some error")
+		}
+		w := New(&strategy.FixedDelay{Delay: 1 * time.Millisecond, Repeats: 10})
+		err := w.Do(context.Background(), fun)
+		require.NoError(t, err)
+		assert.Equal(t, 5, called)
+	}
+
+	before := runtime.NumGoroutine()
+	num := []int{}
+	for i := 0; i < 25; i++ {
+		rep()
+		num = append(num, runtime.NumGoroutine())
+	}
+	time.Sleep(10 * time.Millisecond) // allow GC some time to deal with garbage
+	after := runtime.NumGoroutine()
+	require.False(t, after > before, "goroutines leak: %+v, before:%d, after:%d", num, before, after)
+}
+
+func TestRepeaterMemoryLeakBackOff(t *testing.T) {
+
+	rep := func() {
+		called := 0
+		fun := func() error {
+			time.Sleep(5 * time.Millisecond) // simulate slow call
+			called++
+			if called == 5 { // only 5th call returns ok
+				return nil
+			}
+			return errors.New("some error")
+		}
+		w := New(&strategy.Backoff{Repeats: 10, Duration: 1 * time.Millisecond, Factor: 1.5})
+		err := w.Do(context.Background(), fun)
+		require.NoError(t, err)
+		assert.Equal(t, 5, called)
+	}
+
+	before := runtime.NumGoroutine()
+	num := []int{}
+	for i := 0; i < 25; i++ {
+		rep()
+		num = append(num, runtime.NumGoroutine())
+	}
+	time.Sleep(10 * time.Millisecond) // allow GC some time to deal with garbage
+	after := runtime.NumGoroutine()
+	require.False(t, after > before, "goroutines leak: %+v, before:%d, after:%d", num, before, after)
 }

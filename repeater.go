@@ -45,7 +45,6 @@ func (r Repeater) Do(ctx context.Context, fun func() error, errors ...error) (er
 	}
 
 	ch := r.Start(ctx) // channel of ticks-like events provided by strategy
-
 	for {
 		select {
 		case <-ctx.Done():
