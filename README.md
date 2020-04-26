@@ -26,8 +26,8 @@ type Interface interface {
 
 Returned channels used as "ticks," i.e., for each repeat or initial operation one read from this channel needed. Closing the channel indicates "done with retries." It is pretty much the same idea as `time.Timer` or `time.Tick` implements. Note - the first (technically not-repeated-yet) call won't happen **until something sent to the channel**. For this reason, the typical strategy sends the first "tick" before the first wait/sleep.
 
-Three strategies provided byt the pacakage:
+Three strategies provided byt the package:
 
-1. **Fixed delay**, up to max number of attempts. It is the default strategy used by `repeater.NewDefault` constructor
-2. **BackOff** with jitter provides exponential backoff. It starts from `Duration` interval and goes in steps with `last * math.Pow(factor, attempt)`. Optional jitter randomizes intervals a little bit. _Factor = 1 effectively makes this strategy fixed with `Duration` delay._ 
-3. **Once** strategy does not do any repeats and mainly used for tests/mocks`
+1. **Fixed delay**, up to max number of attempts. It is the default strategy used by `repeater.NewDefault` constructor.
+2. **BackOff** with jitter provides an exponential backoff. It starts from `Duration` interval and goes in steps with `last * math.Pow(factor, attempt)`. Optional jitter randomizes intervals a little. _Factor = 1 effectively makes this strategy fixed with `Duration` delay._ 
+3. **Once** strategy does not do any repeats and mainly used for tests/mocks`.

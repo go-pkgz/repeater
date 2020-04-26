@@ -128,6 +128,7 @@ func TestRepeaterBackoff(t *testing.T) {
 	assert.Nil(t, err, "should be ok")
 	assert.Equal(t, 6, called, "called 6 times")
 
+	//nolint:gocritic
 	t.Log(time.Since(st)) // 100 + 100 * 2^1 + 100 * 2^2 + 100 * 2^3 + 100 * 2^4 = 3100
 	assert.True(t, time.Since(st) >= 3100*time.Millisecond && time.Since(st) < 4100*time.Millisecond,
 		fmt.Sprintf("took %s", time.Since(st)))
@@ -242,7 +243,7 @@ func TestRepeaterMemoryLeakFixed(t *testing.T) {
 	}
 
 	before := runtime.NumGoroutine()
-	num := []int{}
+	var num []int
 	for i := 0; i < 25; i++ {
 		rep()
 		num = append(num, runtime.NumGoroutine())
@@ -271,7 +272,7 @@ func TestRepeaterMemoryLeakBackOff(t *testing.T) {
 	}
 
 	before := runtime.NumGoroutine()
-	num := []int{}
+	var num []int
 	for i := 0; i < 25; i++ {
 		rep()
 		num = append(num, runtime.NumGoroutine())
