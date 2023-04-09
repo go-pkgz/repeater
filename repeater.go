@@ -12,7 +12,12 @@ import (
 
 // Repeater is the main object, should be made by New or NewDefault, embeds strategy
 type Repeater struct {
-	strategy.Interface
+	Strategy
+}
+
+// Strategy interface for repeater strategy
+type Strategy interface {
+	Start(ctx context.Context) <-chan struct{} // returns channel with repeater ticks
 }
 
 // New repeater with a given strategy. If strategy=nil initializes with FixedDelay 5sec, 10 times.
@@ -20,7 +25,7 @@ func New(strtg strategy.Interface) *Repeater {
 	if strtg == nil {
 		strtg = &strategy.FixedDelay{Repeats: 10, Delay: time.Second * 5}
 	}
-	result := Repeater{Interface: strtg}
+	result := Repeater{Strategy: strtg}
 	return &result
 }
 

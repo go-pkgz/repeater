@@ -218,7 +218,7 @@ func TestRepeaterNil(t *testing.T) {
 	}
 
 	r := New(nil)
-	r.Interface.(*strategy.FixedDelay).Delay = 10 * time.Millisecond
+	r.Strategy.(*strategy.FixedDelay).Delay = 10 * time.Millisecond
 	err := r.Do(context.Background(), fun)
 	assert.Nil(t, err, "should be ok")
 	assert.Equal(t, 5, called, "called 5 times")
