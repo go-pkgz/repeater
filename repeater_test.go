@@ -101,7 +101,24 @@ func TestRepeaterFixedCriticalError(t *testing.T) {
 	}
 
 	err := NewDefault(10, time.Millisecond).Do(context.Background(), fun, criticalErr)
-	assert.Equal(t, criticalErr, err)
+	assert.ErrorIs(t, err, criticalErr)
+	assert.Equal(t, 5, called, "called 5 times")
+}
+
+func TestRepeaterFixedCriticalErrorWrap(t *testing.T) {
+	criticalErr := errors.New("critical error")
+
+	called := 0
+	fun := func() error {
+		called++
+		if called == 5 {
+			return fmt.Errorf("wrap err: %w", criticalErr)
+		}
+		return errors.New("some error")
+	}
+
+	err := NewDefault(10, time.Millisecond).Do(context.Background(), fun, criticalErr)
+	assert.ErrorIs(t, err, criticalErr)
 	assert.Equal(t, 5, called, "called 5 times")
 }
 
@@ -160,7 +177,7 @@ func TestRepeaterBackoffFailed(t *testing.T) {
 	}
 	called = 0
 	err = New(&strtg).Do(context.Background(), fun)
-	assert.Equal(t, e, err)
+	assert.ErrorIs(t, err, e)
 	assert.Equal(t, 1, called, "called 1 times")
 }
 
@@ -183,10 +200,11 @@ func TestRepeaterBackoffCanceled(t *testing.T) {
 	}
 
 	err := New(&strtg).Do(ctx, fun)
-	require.NotNil(t, err)
+	require.Error(t, err)
 	assert.True(t, err.Error() == "context deadline exceeded" || err.Error() == "some error")
 	assert.Equal(t, 6, called)
 }
+
 func TestRepeaterOnce(t *testing.T) {
 	e := errors.New("some error")
 	called := 0
@@ -196,13 +214,13 @@ func TestRepeaterOnce(t *testing.T) {
 	}
 
 	err := New(&strategy.Once{}).Do(context.Background(), fun)
-	assert.Equal(t, e, err)
+	assert.ErrorIs(t, err, e)
 	assert.Equal(t, 1, called, "called 1 time")
 
 	called = 0
 	e = nil
 	err = New(&strategy.Once{}).Do(context.Background(), fun)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, 1, called, "called 1 time")
 }
 
@@ -225,7 +243,6 @@ func TestRepeaterNil(t *testing.T) {
 }
 
 func TestRepeaterMemoryLeakFixed(t *testing.T) {
-
 	rep := func() {
 		called := 0
 		fun := func() error {
@@ -254,7 +271,6 @@ func TestRepeaterMemoryLeakFixed(t *testing.T) {
 }
 
 func TestRepeaterMemoryLeakBackOff(t *testing.T) {
-
 	rep := func() {
 		called := 0
 		fun := func() error {
