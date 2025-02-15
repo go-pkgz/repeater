@@ -1,47 +1,64 @@
-// Package repeater call fun till it returns no error, up to repeat some number of iterations and delays defined by strategy.
-// Repeats number and delays defined by strategy.Interface. Terminates immediately on err from
-// provided, optional list of critical errors
+// Package repeater implements retry functionality with different strategies.
+// It provides fixed delays and various backoff strategies (constant, linear, exponential) with jitter support.
+// The package allows custom retry strategies and error-specific handling. Context-aware implementation
+// supports cancellation and timeouts.
 package repeater
 
 import (
 	"context"
 	"errors"
 	"time"
-
-	"github.com/go-pkgz/repeater/strategy"
 )
 
-// Repeater is the main object, should be made by New or NewDefault, embeds strategy
+// ErrAny is a special sentinel error that, when passed as a critical error to Do,
+// makes it fail on any error from the function
+var ErrAny = errors.New("any error")
+
+// Repeater holds configuration for retry operations
 type Repeater struct {
-	Strategy
+	strategy Strategy
+	attempts int
 }
 
-// Strategy interface for repeater strategy
-type Strategy interface {
-	Start(ctx context.Context) <-chan struct{} // returns channel with repeater ticks
-}
-
-// New repeater with a given strategy. If strategy=nil initializes with FixedDelay 5sec, 10 times.
-func New(strtg strategy.Interface) *Repeater {
-	if strtg == nil {
-		strtg = &strategy.FixedDelay{Repeats: 10, Delay: time.Second * 5}
+// NewWithStrategy creates a repeater with a custom retry strategy
+func NewWithStrategy(attempts int, strategy Strategy) *Repeater {
+	if attempts <= 0 {
+		attempts = 1
 	}
-	result := Repeater{Strategy: strtg}
-	return &result
+	if strategy == nil {
+		strategy = NewFixedDelay(time.Second)
+	}
+	return &Repeater{
+		attempts: attempts,
+		strategy: strategy,
+	}
 }
 
-// NewDefault makes repeater with FixedDelay strategy
-func NewDefault(repeats int, delay time.Duration) *Repeater {
-	return New(&strategy.FixedDelay{Repeats: repeats, Delay: delay})
+// NewBackoff creates a repeater with backoff strategy
+// Default settings (can be overridden with options):
+//   - 30s max delay
+//   - exponential backoff
+//   - 10% jitter
+func NewBackoff(attempts int, initial time.Duration, opts ...backoffOption) *Repeater {
+	return NewWithStrategy(attempts, newBackoff(initial, opts...))
 }
 
-// Do repeats fun till no error. Predefined (optional) errors terminate immediately
-func (r Repeater) Do(ctx context.Context, fun func() error, errs ...error) (err error) {
-	ctx, cancelFunc := context.WithCancel(ctx)
-	defer cancelFunc() // ensure strategy's channel termination
+// NewFixed creates a repeater with fixed delay strategy
+func NewFixed(attempts int, delay time.Duration) *Repeater {
+	return NewWithStrategy(attempts, NewFixedDelay(delay))
+}
+
+// Do repeats fun until it succeeds or max attempts reached
+// terminates immediately on context cancellation or if err matches any in termErrs.
+// if errs contains ErrAny, terminates on any error.
+func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) error {
+	var lastErr error
 
 	inErrors := func(err error) bool {
-		for _, e := range errs {
+		for _, e := range termErrs {
+			if errors.Is(e, ErrAny) {
+				return true
+			}
 			if errors.Is(err, e) {
 				return true
 			}
@@ -49,21 +66,34 @@ func (r Repeater) Do(ctx context.Context, fun func() error, errs ...error) (err 
 		return false
 	}
 
-	ch := r.Start(ctx) // channel of ticks-like events provided by strategy
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case _, ok := <-ch:
-			if !ok { // closed channel indicates completion or early termination, set by strategy
-				return err
-			}
-			if err = fun(); err == nil {
-				return nil
-			}
-			if err != nil && inErrors(err) { // terminate on critical error from provided list
-				return err
+	for attempt := 0; attempt < r.attempts; attempt++ {
+		// check context before each attempt
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		var err error
+		if err = fun(); err == nil {
+			return nil
+		}
+
+		lastErr = err
+		if inErrors(err) {
+			return err
+		}
+
+		// don't sleep after the last attempt
+		if attempt < r.attempts-1 {
+			delay := r.strategy.NextDelay(attempt + 1)
+			if delay > 0 {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(delay):
+				}
 			}
 		}
 	}
+
+	return lastErr
 }

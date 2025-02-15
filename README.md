@@ -1,39 +1,135 @@
-# Repeater [![Build Status](https://github.com/go-pkgz/repeater/workflows/build/badge.svg)](https://github.com/go-pkgz/repeater/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/go-pkgz/repeater)](https://goreportcard.com/report/github.com/go-pkgz/repeater) [![Coverage Status](https://coveralls.io/repos/github/go-pkgz/repeater/badge.svg?branch=master)](https://coveralls.io/github/go-pkgz/repeater?branch=master)
+# Repeater
 
-Repeater calls a function until it returns no error, up to some number of iterations and delays defined by strategy. It terminates immediately on err from the provided (optional) list of critical errors.
+[![Build Status](https://github.com/go-pkgz/repeater/workflows/build/badge.svg)](https://github.com/go-pkgz/repeater/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/go-pkgz/repeater)](https://goreportcard.com/report/github.com/go-pkgz/repeater) [![Coverage Status](https://coveralls.io/repos/github/go-pkgz/repeater/badge.svg?branch=master)](https://coveralls.io/github/go-pkgz/repeater?branch=master)
 
-## Actual version
-
-The current version is v2, see [v2 readme](v2/README.md) for details.
-
-----
+Package repeater implements a functional mechanism to repeat operations with different retry strategies.
 
 ## Install and update
 
 `go get -u github.com/go-pkgz/repeater`
 
-## How to use
+## Usage
 
-New Repeater created by `New(strtg strategy.Interface)` or shortcut for default - `NewDefault(repeats int, delay time.Duration) *Repeater`.
-
-To activate invoke `Do` method. `Do` repeats func until no error returned. Predefined (optional) errors terminate the loop immediately.
-                            
-`func (r Repeater) Do(ctx context.Context, fun func() error, errors ...error) (err error)`
-
-### Repeating strategy
-
-User can provide his own strategy implementing the interface:
+### Basic Example with Exponential Backoff
 
 ```go
-type Interface interface {
-	Start(ctx context.Context) chan struct{}
+// create repeater with exponential backoff
+r := repeater.NewBackoff(5, time.Second) // 5 attempts starting with 1s delay
+
+err := r.Do(ctx, func() error {
+// do something that may fail
+return nil
+})
+```
+
+### Fixed Delay with Critical Error
+
+```go
+// create repeater with fixed delay
+r := repeater.NewFixed(3, 100*time.Millisecond)
+
+criticalErr := errors.New("critical error")
+
+err := r.Do(ctx, func() error {
+// do something that may fail
+return fmt.Errorf("temp error")
+}, criticalErr) // will stop immediately if criticalErr returned
+```
+
+### Custom Backoff Strategy
+
+```go
+r := repeater.NewBackoff(5, time.Second,
+repeater.WithMaxDelay(10*time.Second),
+repeater.WithBackoffType(repeater.BackoffLinear),
+repeater.WithJitter(0.1),
+)
+
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+err := r.Do(ctx, func() error {
+// do something that may fail
+return nil
+})
+```
+
+### Stop on Any Error
+
+```go
+r := repeater.NewFixed(3, time.Millisecond)
+
+err := r.Do(ctx, func() error {
+return errors.New("some error")
+}, repeater.ErrAny)  // will stop on any error
+```
+
+## Strategies
+
+The package provides several retry strategies:
+
+1. **Fixed Delay** - each retry happens after a fixed time interval
+2. **Backoff** - delay between retries increases according to the chosen algorithm:
+   - Constant - same delay between attempts
+   - Linear - delay increases linearly
+   - Exponential - delay doubles with each attempt
+
+Backoff strategy can be customized with:
+- Maximum delay cap
+- Jitter to prevent thundering herd
+- Different backoff types (constant/linear/exponential)
+
+### Custom Strategies
+
+You can implement your own retry strategy by implementing the Strategy interface:
+
+```go
+type Strategy interface {
+    // NextDelay returns delay for the next attempt
+    // attempt starts from 1
+    NextDelay(attempt int) time.Duration
 }
 ```
 
-Returned channels used as "ticks," i.e., for each repeat or initial operation one read from this channel needed. Closing the channel indicates "done with retries." It is pretty much the same idea as `time.Timer` or `time.Tick` implements. Note - the first (technically not-repeated-yet) call won't happen **until something sent to the channel**. For this reason, the typical strategy sends the first "tick" before the first wait/sleep.
+Example of a custom strategy that increases delay by a custom factor:
 
-Three strategies provided byt the package:
+```go
+// CustomStrategy implements Strategy with custom factor-based delays
+type CustomStrategy struct {
+    Initial time.Duration
+    Factor  float64
+}
 
-1. **Fixed delay**, up to max number of attempts. It is the default strategy used by `repeater.NewDefault` constructor.
-2. **BackOff** with jitter provides an exponential backoff. It starts from `Duration` interval and goes in steps with `last * math.Pow(factor, attempt)`. Optional jitter randomizes intervals a little. _Factor = 1 effectively makes this strategy fixed with `Duration` delay._ 
-3. **Once** strategy does not do any repeats and mainly used for tests/mocks`.
+func (s CustomStrategy) NextDelay(attempt int) time.Duration {
+    if attempt <= 0 {
+        return 0
+    }
+    delay := time.Duration(float64(s.Initial) * math.Pow(s.Factor, float64(attempt-1)))
+    return delay
+}
+
+// Usage
+strategy := &CustomStrategy{Initial: time.Second, Factor: 1.5}
+r := repeater.NewWithStrategy(5, strategy)
+err := r.Do(ctx, func() error {
+    // attempts will be delayed by: 1s, 1.5s, 2.25s, 3.37s, 5.06s
+    return nil
+})
+```
+
+## Options
+
+For backoff strategy, several options are available:
+
+```go
+WithMaxDelay(time.Duration)   // set maximum delay between retries
+WithBackoffType(BackoffType)  // set backoff type (constant/linear/exponential)
+WithJitter(float64)           // add randomness to delays (0-1.0)
+```
+
+## Error Handling
+
+- Stops on context cancellation
+- Can stop on specific errors (pass them as additional parameters to Do)
+- Special `ErrAny` to stop on any error
+- Returns last error if all attempts fail
