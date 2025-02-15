@@ -1,4 +1,4 @@
-module github.com/go-pkgz/repeater
+module github.com/go-pkgz/repeater/v2
 
 go 1.24
 
