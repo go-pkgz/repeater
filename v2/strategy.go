@@ -49,21 +49,21 @@ type backoff struct {
 type backoffOption func(*backoff)
 
 // WithMaxDelay sets maximum delay for the backoff strategy
-func WithMaxDelay(d time.Duration) backoffOption {
+func WithMaxDelay(d time.Duration) backoffOption { //nolint:revive // unexported type is used in the same package
 	return func(b *backoff) {
 		b.maxDelay = d
 	}
 }
 
 // WithBackoffType sets backoff type for the strategy
-func WithBackoffType(t BackoffType) backoffOption {
+func WithBackoffType(t BackoffType) backoffOption { //nolint:revive // unexported type is used in the same package
 	return func(b *backoff) {
 		b.btype = t
 	}
 }
 
 // WithJitter sets jitter factor for the backoff strategy
-func WithJitter(factor float64) backoffOption {
+func WithJitter(factor float64) backoffOption { //nolint:revive // unexported type is used in the same package
 	return func(b *backoff) {
 		b.jitter = factor
 	}
@@ -106,7 +106,7 @@ func (s backoff) NextDelay(attempt int) time.Duration {
 
 	if s.jitter > 0 {
 		jitter := float64(delay) * s.jitter
-		delay = time.Duration(float64(delay) + (rand.Float64()*jitter - jitter/2))
+		delay = time.Duration(float64(delay) + (rand.Float64()*jitter - jitter/2)) //nolint:gosec // no need for secure random here
 	}
 
 	return delay

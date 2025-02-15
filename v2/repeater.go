@@ -1,3 +1,7 @@
+// Package repeater implements retry functionality with different strategies.
+// It provides fixed delays and various backoff strategies (constant, linear, exponential) with jitter support.
+// The package allows custom retry strategies and error-specific handling. Context-aware implementation
+// supports cancellation and timeouts.
 package repeater
 
 import (

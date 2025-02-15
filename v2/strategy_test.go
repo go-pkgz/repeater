@@ -75,7 +75,7 @@ func TestBackoff(t *testing.T) {
 		assert.Equal(t, time.Second, s.initial)
 		assert.Equal(t, 3*time.Second, s.maxDelay)
 		assert.Equal(t, BackoffLinear, s.btype)
-		assert.Equal(t, 0.2, s.jitter)
+		assert.InDelta(t, 0.2, s.jitter, 0.0001, "custom jitter")
 	})
 
 	t.Run("defaults", func(t *testing.T) {
@@ -83,6 +83,6 @@ func TestBackoff(t *testing.T) {
 		assert.Equal(t, time.Second, s.initial)
 		assert.Equal(t, 30*time.Second, s.maxDelay)
 		assert.Equal(t, BackoffExponential, s.btype)
-		assert.Equal(t, 0.1, s.jitter)
+		assert.InDelta(t, 0.1, s.jitter, 0.0001, "default jitter")
 	})
 }

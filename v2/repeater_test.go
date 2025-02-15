@@ -170,7 +170,7 @@ func TestNewBackoff(t *testing.T) {
 	assert.Equal(t, time.Second, st.initial)
 	assert.Equal(t, 30*time.Second, st.maxDelay)
 	assert.Equal(t, BackoffExponential, st.btype)
-	assert.Equal(t, 0.1, st.jitter)
+	assert.InDelta(t, 0.1, st.jitter, 0.0001, "default jitter")
 
 	// check with options
 	r = NewBackoff(5, time.Second,
@@ -183,7 +183,7 @@ func TestNewBackoff(t *testing.T) {
 	assert.Equal(t, time.Second, st.initial)
 	assert.Equal(t, 5*time.Second, st.maxDelay)
 	assert.Equal(t, BackoffLinear, st.btype)
-	assert.Equal(t, 0.2, st.jitter)
+	assert.InDelta(t, 0.2, st.jitter, 0.0001, "custom jitter")
 }
 
 func TestBackoffReal(t *testing.T) {
@@ -200,7 +200,7 @@ func TestBackoffReal(t *testing.T) {
 	})
 	require.Error(t, err)
 
-	assert.Equal(t, expectedAttempts, len(attempts), "should make exactly %d attempts", expectedAttempts)
+	assert.Len(t, attempts, expectedAttempts, "should make exactly %d attempts", expectedAttempts)
 
 	// first attempt should be immediate
 	assert.Less(t, attempts[0].Sub(startTime), 5*time.Millisecond)
