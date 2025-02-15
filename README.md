@@ -2,6 +2,12 @@
 
 Repeater calls a function until it returns no error, up to some number of iterations and delays defined by strategy. It terminates immediately on err from the provided (optional) list of critical errors.
 
+## Actual version
+
+The current version is v2, see [v2 readme](v2/README.md) for details.
+
+----
+
 ## Install and update
 
 `go get -u github.com/go-pkgz/repeater`
