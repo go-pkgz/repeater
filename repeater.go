@@ -75,6 +75,14 @@ func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) 
 		StartedAt: time.Now(),
 	}
 
+	// finalizeStats updates the stats before returning
+	finalizeStats := func(attempts int, err error) {
+		r.stats.Attempts = attempts
+		r.stats.LastError = err
+		r.stats.FinishedAt = time.Now()
+		r.stats.TotalDuration = r.stats.FinishedAt.Sub(r.stats.StartedAt)
+	}
+
 	inErrors := func(err error) bool {
 		for _, e := range termErrs {
 			if errors.Is(e, ErrAny) {
@@ -90,21 +98,16 @@ func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) 
 	for attempt := 0; attempt < r.attempts; attempt++ {
 		// check context before each attempt
 		if err := ctx.Err(); err != nil {
-			r.stats.Attempts = attempt
-			r.stats.LastError = err
-			r.stats.FinishedAt = time.Now()
-			r.stats.TotalDuration = r.stats.FinishedAt.Sub(r.stats.StartedAt)
+			finalizeStats(attempt, err)
 			return err //nolint:wrapcheck // context errors are standard and don't need wrapping
 		}
 
 		workStart := time.Now()
 		var err error
 		if err = fun(); err == nil {
-			r.stats.Attempts = attempt + 1
-			r.stats.Success = true
 			r.stats.WorkDuration += time.Since(workStart)
-			r.stats.FinishedAt = time.Now()
-			r.stats.TotalDuration = r.stats.FinishedAt.Sub(r.stats.StartedAt)
+			r.stats.Success = true
+			finalizeStats(attempt+1, nil)
 			return nil
 		}
 
@@ -112,10 +115,7 @@ func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) 
 
 		lastErr = err
 		if inErrors(err) {
-			r.stats.Attempts = attempt + 1
-			r.stats.LastError = err
-			r.stats.FinishedAt = time.Now()
-			r.stats.TotalDuration = r.stats.FinishedAt.Sub(r.stats.StartedAt)
+			finalizeStats(attempt+1, err)
 			return err
 		}
 
@@ -126,11 +126,8 @@ func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) 
 				delayStart := time.Now()
 				select {
 				case <-ctx.Done():
-					r.stats.Attempts = attempt + 1
-					r.stats.LastError = ctx.Err()
 					r.stats.DelayDuration += time.Since(delayStart)
-					r.stats.FinishedAt = time.Now()
-					r.stats.TotalDuration = r.stats.FinishedAt.Sub(r.stats.StartedAt)
+					finalizeStats(attempt+1, ctx.Err())
 					return ctx.Err() //nolint:wrapcheck // context errors are standard and don't need wrapping
 				case <-time.After(delay):
 					r.stats.DelayDuration += time.Since(delayStart)
@@ -139,11 +136,7 @@ func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) 
 		}
 	}
 
-	r.stats.Attempts = r.attempts
-	r.stats.LastError = lastErr
-	r.stats.FinishedAt = time.Now()
-	r.stats.TotalDuration = r.stats.FinishedAt.Sub(r.stats.StartedAt)
-
+	finalizeStats(r.attempts, lastErr)
 	return lastErr
 }
 
