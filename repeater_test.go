@@ -275,3 +275,165 @@ func ExampleNewBackoff() {
 	fmt.Printf("completed with error: %v after %d attempts", err, attempts)
 	// Output: completed with error: <nil> after 3 attempts
 }
+
+func TestStats(t *testing.T) {
+	t.Run("success on first attempt", func(t *testing.T) {
+		r := NewFixed(3, 10*time.Millisecond)
+		start := time.Now()
+
+		err := r.Do(context.Background(), func() error {
+			time.Sleep(5 * time.Millisecond)
+			return nil
+		})
+
+		require.NoError(t, err)
+		stats := r.Stats()
+
+		assert.Equal(t, 1, stats.Attempts)
+		assert.True(t, stats.Success)
+		require.NoError(t, stats.LastError)
+		assert.GreaterOrEqual(t, stats.WorkDuration, 5*time.Millisecond)
+		assert.Equal(t, time.Duration(0), stats.DelayDuration)
+		assert.GreaterOrEqual(t, stats.TotalDuration, 5*time.Millisecond)
+		assert.WithinDuration(t, start, stats.StartedAt, time.Millisecond)
+		assert.False(t, stats.FinishedAt.IsZero())
+	})
+
+	t.Run("success after retries", func(t *testing.T) {
+		r := NewFixed(5, 10*time.Millisecond)
+		attempts := 0
+
+		err := r.Do(context.Background(), func() error {
+			attempts++
+			time.Sleep(5 * time.Millisecond)
+			if attempts < 3 {
+				return errors.New("not yet")
+			}
+			return nil
+		})
+
+		require.NoError(t, err)
+		stats := r.Stats()
+
+		assert.Equal(t, 3, stats.Attempts)
+		assert.True(t, stats.Success)
+		require.NoError(t, stats.LastError)
+		assert.GreaterOrEqual(t, stats.WorkDuration, 15*time.Millisecond)  // 3 attempts * 5ms each
+		assert.GreaterOrEqual(t, stats.DelayDuration, 20*time.Millisecond) // 2 delays * 10ms each
+		assert.GreaterOrEqual(t, stats.TotalDuration, 35*time.Millisecond)
+	})
+
+	t.Run("failure after all attempts", func(t *testing.T) {
+		r := NewFixed(3, 5*time.Millisecond)
+		expectedErr := errors.New("always fails")
+
+		err := r.Do(context.Background(), func() error {
+			time.Sleep(2 * time.Millisecond)
+			return expectedErr
+		})
+
+		require.Error(t, err)
+		stats := r.Stats()
+
+		assert.Equal(t, 3, stats.Attempts)
+		assert.False(t, stats.Success)
+		assert.Equal(t, expectedErr, stats.LastError)
+		assert.GreaterOrEqual(t, stats.WorkDuration, 6*time.Millisecond)   // 3 attempts * 2ms each
+		assert.GreaterOrEqual(t, stats.DelayDuration, 10*time.Millisecond) // 2 delays * 5ms each
+		assert.GreaterOrEqual(t, stats.TotalDuration, 16*time.Millisecond)
+	})
+
+	t.Run("context cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		r := NewFixed(5, 20*time.Millisecond)
+
+		go func() {
+			time.Sleep(25 * time.Millisecond)
+			cancel()
+		}()
+
+		err := r.Do(ctx, func() error {
+			time.Sleep(10 * time.Millisecond)
+			return errors.New("failed")
+		})
+
+		require.ErrorIs(t, err, context.Canceled)
+		stats := r.Stats()
+
+		assert.GreaterOrEqual(t, stats.Attempts, 1) // at least one attempt before cancellation
+		assert.LessOrEqual(t, stats.Attempts, 2)    // but no more than 2
+		assert.False(t, stats.Success)
+		require.ErrorIs(t, stats.LastError, context.Canceled)
+		assert.GreaterOrEqual(t, stats.WorkDuration, 10*time.Millisecond) // at least 1 attempt * 10ms
+		// delay duration depends on when cancellation happens
+	})
+
+	t.Run("critical error stops immediately", func(t *testing.T) {
+		criticalErr := errors.New("critical")
+		r := NewFixed(5, 10*time.Millisecond)
+
+		err := r.Do(context.Background(), func() error {
+			time.Sleep(3 * time.Millisecond)
+			return criticalErr
+		}, criticalErr)
+
+		require.ErrorIs(t, err, criticalErr)
+		stats := r.Stats()
+
+		assert.Equal(t, 1, stats.Attempts)
+		assert.False(t, stats.Success)
+		assert.Equal(t, criticalErr, stats.LastError)
+		assert.GreaterOrEqual(t, stats.WorkDuration, 3*time.Millisecond)
+		assert.Equal(t, time.Duration(0), stats.DelayDuration) // no delays for critical error
+	})
+
+	t.Run("multiple calls reset stats", func(t *testing.T) {
+		r := NewFixed(2, 5*time.Millisecond)
+
+		// first call - failure
+		err := r.Do(context.Background(), func() error {
+			return errors.New("always fails")
+		})
+		require.Error(t, err)
+
+		stats1 := r.Stats()
+		assert.Equal(t, 2, stats1.Attempts)
+		assert.False(t, stats1.Success)
+
+		// second call - success
+		err = r.Do(context.Background(), func() error {
+			return nil
+		})
+		require.NoError(t, err)
+
+		stats2 := r.Stats()
+		assert.Equal(t, 1, stats2.Attempts)
+		assert.True(t, stats2.Success)
+		require.NoError(t, stats2.LastError)
+
+		// stats should be different
+		assert.NotEqual(t, stats1.StartedAt, stats2.StartedAt)
+		assert.NotEqual(t, stats1.FinishedAt, stats2.FinishedAt)
+	})
+
+	t.Run("backoff strategy stats", func(t *testing.T) {
+		r := NewBackoff(3, 10*time.Millisecond, WithJitter(0))
+		attempts := 0
+
+		err := r.Do(context.Background(), func() error {
+			attempts++
+			time.Sleep(5 * time.Millisecond)
+			return errors.New("fail")
+		})
+
+		require.Error(t, err)
+		stats := r.Stats()
+
+		assert.Equal(t, 3, stats.Attempts)
+		assert.False(t, stats.Success)
+		assert.GreaterOrEqual(t, stats.WorkDuration, 15*time.Millisecond) // 3 attempts * 5ms each
+		// with exponential backoff: 10ms + 20ms = 30ms
+		assert.GreaterOrEqual(t, stats.DelayDuration, 30*time.Millisecond)
+		assert.Less(t, stats.DelayDuration, 35*time.Millisecond)
+	})
+}
