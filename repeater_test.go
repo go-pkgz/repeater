@@ -90,6 +90,209 @@ func TestDo(t *testing.T) {
 	})
 }
 
+func TestErrorClassifier(t *testing.T) {
+	t.Run("classifier stops on non-retryable error", func(t *testing.T) {
+		calls := 0
+		classifier := func(err error) bool {
+			return err.Error() != "stop"
+		}
+
+		r := NewBackoff(5, time.Millisecond)
+		r.SetErrorClassifier(classifier)
+		err := r.Do(context.Background(), func() error {
+			calls++
+			return errors.New("stop")
+		})
+
+		require.Error(t, err)
+		assert.Equal(t, "stop", err.Error())
+		assert.Equal(t, 1, calls)
+	})
+
+	t.Run("classifier retries on retryable error", func(t *testing.T) {
+		calls := 0
+		classifier := func(err error) bool {
+			return err.Error() == "retry"
+		}
+
+		r := NewBackoff(3, time.Millisecond)
+		r.SetErrorClassifier(classifier)
+		err := r.Do(context.Background(), func() error {
+			calls++
+			if calls < 3 {
+				return errors.New("retry")
+			}
+			return nil
+		})
+
+		require.NoError(t, err)
+		assert.Equal(t, 3, calls)
+	})
+
+	t.Run("classifier with mixed errors", func(t *testing.T) {
+		calls := 0
+		classifier := func(err error) bool {
+			return err.Error() != "401"
+		}
+
+		r := NewBackoff(5, time.Millisecond)
+		r.SetErrorClassifier(classifier)
+		err := r.Do(context.Background(), func() error {
+			calls++
+			switch calls {
+			case 1:
+				return errors.New("429") // retryable
+			case 2:
+				return errors.New("503") // retryable
+			case 3:
+				return errors.New("401") // non-retryable
+			default:
+				return nil
+			}
+		})
+
+		require.Error(t, err)
+		assert.Equal(t, "401", err.Error())
+		assert.Equal(t, 3, calls)
+	})
+
+	t.Run("classifier takes precedence over critical errors", func(t *testing.T) {
+		calls := 0
+		criticalErr := errors.New("critical")
+		classifier := func(err error) bool {
+			return true // always retry
+		}
+
+		r := NewBackoff(3, time.Millisecond)
+		r.SetErrorClassifier(classifier)
+		err := r.Do(context.Background(), func() error {
+			calls++
+			if calls < 3 {
+				return criticalErr
+			}
+			return nil
+		}, criticalErr) // this should be ignored due to classifier
+
+		require.NoError(t, err)
+		assert.Equal(t, 3, calls)
+	})
+
+	t.Run("no classifier falls back to critical errors", func(t *testing.T) {
+		calls := 0
+		criticalErr := errors.New("critical")
+
+		r := NewBackoff(5, time.Millisecond)
+		err := r.Do(context.Background(), func() error {
+			calls++
+			return criticalErr
+		}, criticalErr)
+
+		require.ErrorIs(t, err, criticalErr)
+		assert.Equal(t, 1, calls)
+	})
+
+	t.Run("classifier with nil error", func(t *testing.T) {
+		calls := 0
+		classifierCalls := 0
+		classifier := func(err error) bool {
+			classifierCalls++
+			return err != nil
+		}
+
+		r := NewBackoff(3, time.Millisecond)
+		r.SetErrorClassifier(classifier)
+		err := r.Do(context.Background(), func() error {
+			calls++
+			return nil
+		})
+
+		require.NoError(t, err)
+		assert.Equal(t, 1, calls)
+		assert.Equal(t, 0, classifierCalls) // classifier should not be called on success
+	})
+
+	t.Run("api client example", func(t *testing.T) {
+		calls := 0
+		isRetryable := func(err error) bool {
+			if err == nil {
+				return false
+			}
+			errStr := err.Error()
+			// retryable errors
+			if errStr == "429" || errStr == "503" || errStr == "timeout" {
+				return true
+			}
+			// non-retryable errors
+			if errStr == "401" || errStr == "400" {
+				return false
+			}
+			return true // default to retry
+		}
+
+		r := NewBackoff(5, time.Millisecond)
+		r.SetErrorClassifier(isRetryable)
+		err := r.Do(context.Background(), func() error {
+			calls++
+			switch calls {
+			case 1:
+				return errors.New("429") // rate limit - retry
+			case 2:
+				return errors.New("timeout") // timeout - retry
+			case 3:
+				return errors.New("401") // auth error - stop
+			default:
+				return nil
+			}
+		})
+
+		require.Error(t, err)
+		assert.Equal(t, "401", err.Error())
+		assert.Equal(t, 3, calls)
+	})
+
+	t.Run("classifier works with NewFixed", func(t *testing.T) {
+		calls := 0
+		classifier := func(err error) bool {
+			return err.Error() != "stop"
+		}
+
+		r := NewFixed(5, time.Millisecond)
+		r.SetErrorClassifier(classifier)
+		err := r.Do(context.Background(), func() error {
+			calls++
+			if calls < 3 {
+				return errors.New("retry")
+			}
+			return errors.New("stop")
+		})
+
+		require.Error(t, err)
+		assert.Equal(t, "stop", err.Error())
+		assert.Equal(t, 3, calls)
+	})
+
+	t.Run("classifier works with NewWithStrategy", func(t *testing.T) {
+		calls := 0
+		classifier := func(err error) bool {
+			return err.Error() == "retry"
+		}
+
+		r := NewWithStrategy(5, NewFixedDelay(time.Millisecond))
+		r.SetErrorClassifier(classifier)
+		err := r.Do(context.Background(), func() error {
+			calls++
+			if calls < 2 {
+				return errors.New("retry")
+			}
+			return errors.New("stop")
+		})
+
+		require.Error(t, err)
+		assert.Equal(t, "stop", err.Error())
+		assert.Equal(t, 2, calls)
+	})
+}
+
 func TestDoContext(t *testing.T) {
 	t.Run("respects cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())

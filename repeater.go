@@ -14,16 +14,20 @@ import (
 // makes it fail on any error from the function
 var ErrAny = errors.New("any error")
 
+// ErrorClassifier determines if an error should be retried.
+// Returns true if the error should trigger a retry, false to stop immediately.
+type ErrorClassifier func(error) bool
+
 // Stats holds execution statistics for a repeater run
 type Stats struct {
-	LastError     error         // Last error encountered (nil if succeeded)
-	StartedAt     time.Time     // When the repeater started
-	FinishedAt    time.Time     // When the repeater finished
-	TotalDuration time.Duration // Total elapsed time from start to finish
-	WorkDuration  time.Duration // Time spent executing the function (excluding delays)
-	DelayDuration time.Duration // Time spent in delays between attempts
-	Attempts      int           // Number of attempts made (including the successful one)
-	Success       bool          // Whether the operation eventually succeeded
+	LastError     error         // last error encountered (nil if succeeded)
+	StartedAt     time.Time     // when the repeater started
+	FinishedAt    time.Time     // when the repeater finished
+	TotalDuration time.Duration // total elapsed time from start to finish
+	WorkDuration  time.Duration // time spent executing the function (excluding delays)
+	DelayDuration time.Duration // time spent in delays between attempts
+	Attempts      int           // number of attempts made (including the successful one)
+	Success       bool          // whether the operation eventually succeeded
 }
 
 // Repeater holds configuration for retry operations.
@@ -31,9 +35,10 @@ type Stats struct {
 // concurrently for different functions. Create separate Repeater instances for
 // concurrent operations.
 type Repeater struct {
-	strategy Strategy
-	stats    Stats
-	attempts int
+	strategy   Strategy
+	stats      Stats
+	attempts   int
+	classifier ErrorClassifier
 }
 
 // NewWithStrategy creates a repeater with a custom retry strategy
@@ -114,7 +119,15 @@ func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) 
 		r.stats.WorkDuration += time.Since(workStart)
 
 		lastErr = err
-		if inErrors(err) {
+
+		// if classifier is set, use it to determine if we should retry
+		if r.classifier != nil {
+			if !r.classifier(err) {
+				finalizeStats(attempt+1, err)
+				return err
+			}
+		} else if inErrors(err) {
+			// fall back to critical errors list if no classifier
 			finalizeStats(attempt+1, err)
 			return err
 		}
@@ -138,6 +151,14 @@ func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) 
 
 	finalizeStats(r.attempts, lastErr)
 	return lastErr
+}
+
+// SetErrorClassifier sets a function to determine if errors are retryable.
+// This can be used with any repeater strategy (NewFixed, NewBackoff, NewWithStrategy).
+// When set, the classifier takes precedence over the critical errors list.
+// Returns true to retry, false to stop immediately.
+func (r *Repeater) SetErrorClassifier(classifier ErrorClassifier) {
+	r.classifier = classifier
 }
 
 // Stats returns the execution statistics from the last Do() call

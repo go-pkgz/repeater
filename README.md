@@ -133,6 +133,56 @@ WithJitter(float64)           // add randomness to delays (0-1.0)
 - Can stop on specific errors (pass them as additional parameters to Do)
 - Special `ErrAny` to stop on any error
 - Returns last error if all attempts fail
+- Custom error classification via `SetErrorClassifier`
+
+### Error Classification
+
+You can provide a custom error classifier function to dynamically determine if an error should trigger a retry or stop immediately. This is particularly useful for API clients where different error types require different handling:
+
+```go
+// Define what errors are retryable
+isRetryable := func(err error) bool {
+    if err == nil {
+        return false
+    }
+    
+    errStr := strings.ToLower(err.Error())
+    
+    // Retryable patterns
+    if strings.Contains(errStr, "429") ||
+       strings.Contains(errStr, "rate limit") ||
+       strings.Contains(errStr, "timeout") ||
+       strings.Contains(errStr, "503") {
+        return true
+    }
+    
+    // Non-retryable patterns
+    if strings.Contains(errStr, "401") ||
+       strings.Contains(errStr, "authentication") ||
+       strings.Contains(errStr, "token limit") {
+        return false
+    }
+    
+    return true // default to retry
+}
+
+// Use with any repeater strategy
+r := repeater.NewBackoff(5, time.Second)
+r.SetErrorClassifier(isRetryable)
+
+err := r.Do(ctx, func() error {
+    // API call that might fail
+    return apiClient.Call()
+})
+```
+
+When an error classifier is set:
+- After each error, the classifier function is called
+- If it returns `false`, the operation stops immediately
+- If it returns `true`, the retry logic continues
+- The classifier takes precedence over the critical errors list
+
+This feature works with all repeater strategies (NewFixed, NewBackoff, NewWithStrategy).
 
 ## Execution Statistics
 

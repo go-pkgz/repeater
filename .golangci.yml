@@ -43,6 +43,8 @@ linters:
       min-complexity: 15
     govet:
       enable-all: true
+      disable:
+        - fieldalignment
     lll:
       line-length: 140
     misspell:
