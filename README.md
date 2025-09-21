@@ -6,7 +6,7 @@ Package repeater implements a functional mechanism to repeat operations with dif
 
 ## Install and update
 
-`go get -u github.com/go-pkgz/repeater`
+`go get -u github.com/go-pkgz/repeater/v2`
 
 ## Usage
 
