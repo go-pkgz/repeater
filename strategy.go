@@ -100,13 +100,29 @@ func (s backoff) NextDelay(attempt int) time.Duration {
 		delay = s.initial * time.Duration(1<<(attempt-1))
 	}
 
-	if s.maxDelay > 0 && delay > s.maxDelay {
+	// Multiplication can overflow to a negative duration for large attempt
+	// numbers; clamp before comparing against maxDelay.
+	if delay <= 0 && s.initial > 0 {
+		if s.maxDelay > 0 {
+			delay = s.maxDelay
+		} else {
+			delay = 1<<63 - 1 // math.MaxInt64 without importing math
+		}
+	} else if s.maxDelay > 0 && delay > s.maxDelay {
 		delay = s.maxDelay
 	}
 
 	if s.jitter > 0 {
 		jitter := float64(delay) * s.jitter
 		delay = time.Duration(float64(delay) + (rand.Float64()*jitter - jitter/2)) //nolint:gosec // no need for secure random here
+		// Jitter must not undo the overflow clamp or produce a negative wait.
+		if delay < 0 {
+			if s.maxDelay > 0 {
+				delay = s.maxDelay
+			} else {
+				delay = 0
+			}
+		}
 	}
 
 	return delay

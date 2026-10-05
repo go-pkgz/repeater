@@ -86,3 +86,24 @@ func TestBackoff(t *testing.T) {
 		assert.InDelta(t, 0.1, s.jitter, 0.0001, "default jitter")
 	})
 }
+
+func TestBackoffOverflowClamped(t *testing.T) {
+	b := newBackoff(time.Second, WithJitter(0)) // default maxDelay 30s
+	for _, attempt := range []int{1, 10, 40, 62, 63} {
+		d := b.NextDelay(attempt)
+		if d < 0 {
+			t.Fatalf("attempt %d: negative delay %v", attempt, d)
+		}
+		if d > 30*time.Second {
+			t.Fatalf("attempt %d: delay %v exceeds maxDelay", attempt, d)
+		}
+	}
+
+	b2 := newBackoff(time.Millisecond, WithMaxDelay(0), WithJitter(0), WithBackoffType(BackoffExponential))
+	for _, attempt := range []int{50, 60, 63} {
+		d := b2.NextDelay(attempt)
+		if d <= 0 {
+			t.Fatalf("attempt %d with no maxDelay: non-positive delay %v", attempt, d)
+		}
+	}
+}
