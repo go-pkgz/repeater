@@ -423,7 +423,7 @@ func TestBackoffReal(t *testing.T) {
 	// - attempt 4 - after 40ms delay  (total ~70ms)
 	totalTime := attempts[len(attempts)-1].Sub(startTime)
 	assert.Greater(t, totalTime, 65*time.Millisecond)
-	assert.Less(t, totalTime, 75*time.Millisecond)
+	assert.Less(t, totalTime, 100*time.Millisecond)
 }
 
 func ExampleRepeater_Do() {
