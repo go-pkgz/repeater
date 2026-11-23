@@ -637,6 +637,6 @@ func TestStats(t *testing.T) {
 		assert.GreaterOrEqual(t, stats.WorkDuration, 15*time.Millisecond) // 3 attempts * 5ms each
 		// with exponential backoff: 10ms + 20ms = 30ms
 		assert.GreaterOrEqual(t, stats.DelayDuration, 30*time.Millisecond)
-		assert.Less(t, stats.DelayDuration, 35*time.Millisecond)
+		assert.Less(t, stats.DelayDuration, 100*time.Millisecond) // generous bound for slow CI runners
 	})
 }

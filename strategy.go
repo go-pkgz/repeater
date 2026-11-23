@@ -1,9 +1,13 @@
 package repeater
 
 import (
+	"math"
 	"math/rand"
 	"time"
 )
+
+// maxDuration is the longest delay a time.Duration can hold
+const maxDuration = time.Duration(math.MaxInt64)
 
 // Strategy defines how to calculate delays between retries
 type Strategy interface {
@@ -90,24 +94,39 @@ func (s backoff) NextDelay(attempt int) time.Duration {
 		return 0
 	}
 
-	var delay time.Duration
+	// computed in float64, so a large attempt number saturates instead of overflowing time.Duration
+	var delay float64
 	switch s.btype {
 	case BackoffConstant:
-		delay = s.initial
+		delay = float64(s.initial)
 	case BackoffLinear:
-		delay = s.initial * time.Duration(attempt)
+		delay = float64(s.initial) * float64(attempt)
 	case BackoffExponential:
-		delay = s.initial * time.Duration(1<<(attempt-1))
+		// an exponent of 63 or more saturates any positive initial delay, and a much larger one overflows inside math.Ldexp
+		delay = math.Ldexp(float64(s.initial), min(attempt-1, 64))
 	}
 
-	if s.maxDelay > 0 && delay > s.maxDelay {
-		delay = s.maxDelay
+	limit := maxDuration
+	if s.maxDelay > 0 {
+		limit = s.maxDelay
 	}
+	delay = min(delay, float64(limit))
 
 	if s.jitter > 0 {
-		jitter := float64(delay) * s.jitter
-		delay = time.Duration(float64(delay) + (rand.Float64()*jitter - jitter/2)) //nolint:gosec // no need for secure random here
+		jitter := delay * s.jitter
+		delay += rand.Float64()*jitter - jitter/2 //nolint:gosec // no need for secure random here
 	}
 
-	return delay
+	return toDuration(delay, maxDuration)
+}
+
+// toDuration converts d to a time.Duration within [0, limit]
+func toDuration(d float64, limit time.Duration) time.Duration {
+	if d >= float64(limit) {
+		return limit
+	}
+	if d <= 0 {
+		return 0
+	}
+	return time.Duration(d)
 }

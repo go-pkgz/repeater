@@ -1,6 +1,7 @@
 package repeater
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -52,6 +53,48 @@ func TestBackoff(t *testing.T) {
 		assert.Equal(t, 1*time.Second, s.NextDelay(1))
 		assert.Equal(t, 2*time.Second, s.NextDelay(2))
 		assert.Equal(t, 2*time.Second, s.NextDelay(3)) // capped at max delay
+	})
+
+	t.Run("large attempts stay within max delay", func(t *testing.T) {
+		for _, btype := range []BackoffType{BackoffConstant, BackoffLinear, BackoffExponential} {
+			s := newBackoff(time.Second, WithJitter(0), WithBackoffType(btype)) // default 30s max delay
+			for attempt := 1; attempt <= 200; attempt++ {
+				delay := s.NextDelay(attempt)
+				assert.Greater(t, delay, time.Duration(0), "type %d, attempt %d", btype, attempt)
+				assert.LessOrEqual(t, delay, 30*time.Second, "type %d, attempt %d", btype, attempt)
+			}
+			assert.Greater(t, s.NextDelay(math.MaxInt), time.Duration(0), "type %d, attempt MaxInt", btype)
+		}
+
+		s := newBackoff(time.Second, WithJitter(0))
+		assert.Equal(t, 16*time.Second, s.NextDelay(5))
+		assert.Equal(t, 30*time.Second, s.NextDelay(6))
+		assert.Equal(t, 30*time.Second, s.NextDelay(35))
+		assert.Equal(t, 30*time.Second, s.NextDelay(64))
+		assert.Equal(t, 30*time.Second, s.NextDelay(math.MaxInt))
+
+		s = newBackoff(time.Hour, WithJitter(0), WithBackoffType(BackoffLinear))
+		assert.Equal(t, 30*time.Second, s.NextDelay(math.MaxInt))
+	})
+
+	t.Run("no max delay saturates", func(t *testing.T) {
+		s := newBackoff(time.Second, WithJitter(0), WithMaxDelay(0))
+		assert.Equal(t, 512*time.Second, s.NextDelay(10))
+		prev := time.Duration(0)
+		for attempt := 1; attempt <= 200; attempt++ {
+			delay := s.NextDelay(attempt)
+			assert.GreaterOrEqual(t, delay, prev, "attempt %d", attempt)
+			prev = delay
+		}
+		assert.Equal(t, time.Duration(math.MaxInt64), s.NextDelay(100))
+
+		s = newBackoff(time.Hour, WithJitter(0), WithMaxDelay(0), WithBackoffType(BackoffLinear))
+		assert.Equal(t, time.Duration(math.MaxInt64), s.NextDelay(math.MaxInt))
+
+		s = newBackoff(time.Second, WithMaxDelay(0)) // default jitter
+		for range 100 {
+			assert.Greater(t, s.NextDelay(100), time.Duration(0))
+		}
 	})
 
 	t.Run("jitter", func(t *testing.T) {
