@@ -20,7 +20,7 @@ type ErrorClassifier func(error) bool
 
 // Stats holds execution statistics for a repeater run
 type Stats struct {
-	LastError     error         // last error encountered (nil if succeeded)
+	LastError     error         // last error returned by fun, or the context error if fun never ran (nil if succeeded)
 	StartedAt     time.Time     // when the repeater started
 	FinishedAt    time.Time     // when the repeater finished
 	TotalDuration time.Duration // total elapsed time from start to finish
@@ -72,6 +72,9 @@ func NewFixed(attempts int, delay time.Duration) *Repeater {
 // Do repeats fun until it succeeds or max attempts reached
 // terminates immediately on context cancellation or if err matches any in termErrs.
 // if errs contains ErrAny, terminates on any error.
+// The context is checked before each attempt and during the delay between attempts; when it ends there,
+// Do returns the context error while Stats().LastError keeps the last error returned by fun.
+// A running fun is not interrupted, so it has to watch ctx itself to stop early.
 func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) error {
 	var lastErr error
 
@@ -103,7 +106,11 @@ func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) 
 	for attempt := 0; attempt < r.attempts; attempt++ {
 		// check context before each attempt
 		if err := ctx.Err(); err != nil {
-			finalizeStats(attempt, err)
+			if lastErr != nil {
+				finalizeStats(attempt, lastErr)
+			} else {
+				finalizeStats(attempt, err) // fun never ran, the context error is the only one
+			}
 			return err //nolint:wrapcheck // context errors are standard and don't need wrapping
 		}
 
@@ -140,7 +147,7 @@ func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) 
 				select {
 				case <-ctx.Done():
 					r.stats.DelayDuration += time.Since(delayStart)
-					finalizeStats(attempt+1, ctx.Err())
+					finalizeStats(attempt+1, lastErr)
 					return ctx.Err() //nolint:wrapcheck // context errors are standard and don't need wrapping
 				case <-time.After(delay):
 					r.stats.DelayDuration += time.Since(delayStart)

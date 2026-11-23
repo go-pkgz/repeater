@@ -108,6 +108,33 @@ func TestBackoff(t *testing.T) {
 		}
 	})
 
+	t.Run("jitter never exceeds max delay", func(t *testing.T) {
+		s := newBackoff(time.Second, WithMaxDelay(10*time.Second)) // default 10% jitter
+		for range 1000 {
+			delay := s.NextDelay(10)
+			assert.LessOrEqual(t, delay, 10*time.Second)
+			assert.GreaterOrEqual(t, delay, 9500*time.Millisecond) // cap - 5% jitter
+		}
+	})
+
+	t.Run("jitter factor clamped to 0-1", func(t *testing.T) {
+		s := newBackoff(time.Second, WithJitter(3))
+		assert.InDelta(t, 1.0, s.jitter, 0.0001)
+		for range 1000 {
+			delay := s.NextDelay(1)
+			assert.GreaterOrEqual(t, delay, 500*time.Millisecond) // initial - 50% jitter
+			assert.LessOrEqual(t, delay, 1500*time.Millisecond)   // initial + 50% jitter
+		}
+
+		s = newBackoff(time.Second, WithJitter(-1))
+		assert.InDelta(t, 0.0, s.jitter, 0.0001)
+		assert.Equal(t, time.Second, s.NextDelay(1))
+
+		s = newBackoff(time.Second, WithJitter(math.NaN()))
+		assert.InDelta(t, 0.0, s.jitter, 0.0001)
+		assert.Equal(t, time.Second, s.NextDelay(1))
+	})
+
 	t.Run("all options", func(t *testing.T) {
 		s := newBackoff(time.Second,
 			WithBackoffType(BackoffLinear),

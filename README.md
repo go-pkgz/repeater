@@ -122,14 +122,15 @@ err := r.Do(ctx, func() error {
 For backoff strategy, several options are available:
 
 ```go
-WithMaxDelay(time.Duration)   // set maximum delay between retries
+WithMaxDelay(time.Duration)   // set maximum delay between retries, jitter included
 WithBackoffType(BackoffType)  // set backoff type (constant/linear/exponential)
-WithJitter(float64)           // add randomness to delays (0-1.0)
+WithJitter(float64)           // add randomness to delays (0-1.0, values outside are clamped)
 ```
 
 ## Error Handling
 
-- Stops on context cancellation
+- Stops on context cancellation, checked before each attempt and during the delay between attempts; `Do` then returns the context error, and `Stats().LastError` keeps the last error returned by the function
+- Does not interrupt a running function: it has to watch `ctx` itself to stop early
 - Can stop on specific errors (pass them as additional parameters to Do)
 - Special `ErrAny` to stop on any error
 - Returns last error if all attempts fail
@@ -218,7 +219,7 @@ The `Stats` struct provides the following information:
 - `TotalDuration` - Total elapsed time from start to finish
 - `WorkDuration` - Time spent executing the function (excluding delays)
 - `DelayDuration` - Time spent in delays between attempts
-- `LastError` - Last error encountered (nil if succeeded)
+- `LastError` - Last error returned by the function (nil if succeeded); the context error only when the context ended before the first attempt
 - `StartedAt` - When the repeater started
 - `FinishedAt` - When the repeater finished
 
