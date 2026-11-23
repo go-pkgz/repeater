@@ -108,6 +108,20 @@ func TestBackoff(t *testing.T) {
 		}
 	})
 
+	t.Run("zero or negative initial delay gives zero delay", func(t *testing.T) {
+		for _, btype := range []BackoffType{BackoffConstant, BackoffLinear, BackoffExponential} {
+			for _, jitter := range []float64{0, 0.1} {
+				for _, initial := range []time.Duration{0, -time.Second} {
+					s := newBackoff(initial, WithBackoffType(btype), WithJitter(jitter))
+					for _, attempt := range []int{1, 2, 3, 100} {
+						assert.Equal(t, time.Duration(0), s.NextDelay(attempt),
+							"type %d, jitter %v, initial %v, attempt %d", btype, jitter, initial, attempt)
+					}
+				}
+			}
+		}
+	})
+
 	t.Run("jitter never exceeds max delay", func(t *testing.T) {
 		s := newBackoff(time.Second, WithMaxDelay(10*time.Second)) // default 10% jitter
 		for range 1000 {
