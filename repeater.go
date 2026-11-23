@@ -31,9 +31,9 @@ type Stats struct {
 }
 
 // Repeater holds configuration for retry operations.
-// Note: Repeater is not thread-safe. Each Repeater instance should not be used
-// concurrently for different functions. Create separate Repeater instances for
-// concurrent operations.
+// Note: Repeater is not thread-safe, because Do records statistics on every call.
+// A Repeater must not be used from several goroutines at once, even with the same
+// function; create one per concurrent call.
 type Repeater struct {
 	strategy   Strategy
 	stats      Stats
@@ -162,7 +162,7 @@ func (r *Repeater) Do(ctx context.Context, fun func() error, termErrs ...error) 
 
 // SetErrorClassifier sets a function to determine if errors are retryable.
 // This can be used with any repeater strategy (NewFixed, NewBackoff, NewWithStrategy).
-// When set, the classifier takes precedence over the critical errors list.
+// When a classifier is set, the errors passed to Do, ErrAny included, are ignored.
 // Returns true to retry, false to stop immediately.
 func (r *Repeater) SetErrorClassifier(classifier ErrorClassifier) {
 	r.classifier = classifier

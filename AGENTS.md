@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents working with code in this repository.
 
 ## Build and Test Commands
 
@@ -60,7 +60,6 @@ This is v2 of the module (`github.com/go-pkgz/repeater/v2`). The package follows
 
 ## Testing Patterns
 
-- Tests use table-driven approach with testify assertions
+- Tests use `t.Run` subtests with testify assertions
 - Race condition testing is standard (`-race` flag)
-- Coverage excludes mock files (filtered in CI)
 - Tests focus on timing behavior, context cancellation, and error handling edge cases

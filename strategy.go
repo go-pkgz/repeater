@@ -11,7 +11,8 @@ const maxDuration = time.Duration(math.MaxInt64)
 
 // Strategy defines how to calculate delays between retries
 type Strategy interface {
-	// NextDelay returns delay for the next attempt, attempt starts from 1
+	// NextDelay returns the delay after the given failed attempt, attempt starts from 1.
+	// It is not called after the last attempt.
 	NextDelay(attempt int) time.Duration
 }
 
