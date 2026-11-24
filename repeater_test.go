@@ -315,6 +315,27 @@ func TestDoContext(t *testing.T) {
 		assert.Equal(t, 1, calls)
 	})
 
+	t.Run("no delay after the last attempt", func(t *testing.T) {
+		// a delay after the last failed attempt would outlast the timeout and return the context error
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		r := NewFixed(1, time.Hour)
+		err := r.Do(ctx, func() error { return errors.New("fail") })
+		require.EqualError(t, err, "fail")
+
+		// no delay between the three attempts, an hour after the third one if it were asked for
+		r = NewWithStrategy(3, delayFunc(func(attempt int) time.Duration {
+			if attempt < 3 {
+				return 0
+			}
+			return time.Hour
+		}))
+		calls := 0
+		err = r.Do(ctx, func() error { calls++; return errors.New("fail") })
+		require.EqualError(t, err, "fail")
+		assert.Equal(t, 3, calls)
+	})
+
 	t.Run("timeout before first attempt", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 		defer cancel()
@@ -679,3 +700,8 @@ func TestStats(t *testing.T) {
 		assert.Less(t, stats.DelayDuration, 100*time.Millisecond) // generous bound for slow CI runners
 	})
 }
+
+// delayFunc adapts a function to the Strategy interface
+type delayFunc func(attempt int) time.Duration
+
+func (f delayFunc) NextDelay(attempt int) time.Duration { return f(attempt) }
