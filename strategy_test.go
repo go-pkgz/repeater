@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFixedDelay(t *testing.T) {
@@ -128,6 +129,39 @@ func TestBackoff(t *testing.T) {
 			delay := s.NextDelay(10)
 			assert.LessOrEqual(t, delay, 10*time.Second)
 			assert.GreaterOrEqual(t, delay, 9500*time.Millisecond) // cap - 5% jitter
+		}
+	})
+
+	t.Run("jitter does not pile up at max delay", func(t *testing.T) {
+		const samples = 10000
+		for _, tc := range []struct {
+			name    string
+			s       *backoff
+			attempt int
+			limit   time.Duration
+			lo      time.Duration // lowest delay jitter can give
+		}{
+			{"capped", newBackoff(time.Minute), 1, 30 * time.Second, 28500 * time.Millisecond},
+			{"capped after growth", newBackoff(time.Second), 10, 30 * time.Second, 28500 * time.Millisecond},
+			{"near cap", newBackoff(9900*time.Millisecond, WithMaxDelay(10*time.Second), WithBackoffType(BackoffConstant)),
+				1, 10 * time.Second, 9405 * time.Millisecond},
+		} {
+			atLimit, lowerHalf := 0, 0
+			mid := tc.lo + (tc.limit-tc.lo)/2
+			for range samples {
+				delay := tc.s.NextDelay(tc.attempt)
+				require.GreaterOrEqual(t, delay, tc.lo, tc.name)
+				require.LessOrEqual(t, delay, tc.limit, tc.name)
+				if delay == tc.limit {
+					atLimit++
+				}
+				if delay < mid {
+					lowerHalf++
+				}
+			}
+			// a uniform draw almost never lands exactly on the cap and puts about half the samples below the middle
+			assert.Less(t, atLimit, samples/100, "%s: %d of %d samples at exactly %v", tc.name, atLimit, samples, tc.limit)
+			assert.InDelta(t, samples/2, lowerHalf, samples/10, "%s: %d of %d samples below %v", tc.name, lowerHalf, samples, mid)
 		}
 	})
 

@@ -129,7 +129,7 @@ WithBackoffType(BackoffType)  // set backoff type (constant/linear/exponential)
 WithJitter(float64)           // add randomness to delays (0-1.0, values outside are clamped)
 ```
 
-Without options, `NewBackoff` uses exponential backoff, a 30s maximum delay and jitter 0.1. A jitter factor f spreads each delay uniformly over plus or minus f/2 of it, so 0.1 means plus or minus 5%; once a delay reaches the maximum, jitter can only shorten it. `WithMaxDelay(0)` removes the maximum.
+Without options, `NewBackoff` uses exponential backoff, a 30s maximum delay and jitter 0.1. A jitter factor f spreads each delay uniformly over plus or minus f/2 of it, so 0.1 means plus or minus 5%. The part of that range above the maximum delay is cut off, so a delay at or near the maximum spreads evenly below it. `WithMaxDelay(0)` removes the maximum.
 
 For every constructor, an attempts count below 1 means a single attempt, and `NewWithStrategy` with a nil strategy uses a fixed 1s delay.
 

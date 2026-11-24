@@ -68,8 +68,9 @@ func WithBackoffType(t BackoffType) backoffOption { //nolint:revive // unexporte
 }
 
 // WithJitter sets jitter factor for the backoff strategy. A factor f spreads each delay
-// uniformly over plus or minus f/2 of it. The maximum delay applies both before and after
-// the jitter, so a capped delay only gets shorter. Values below 0 are treated as 0 and above 1 as 1.
+// uniformly over plus or minus f/2 of it, with the part of that range above the maximum
+// delay cut off, so a capped delay spreads uniformly below the cap. Values below 0 are
+// treated as 0 and above 1 as 1.
 func WithJitter(factor float64) backoffOption { //nolint:revive // unexported type is used in the same package
 	return func(b *backoff) {
 		switch {
@@ -123,11 +124,13 @@ func (s backoff) NextDelay(attempt int) time.Duration {
 	delay = min(delay, float64(limit))
 
 	if s.jitter > 0 {
-		jitter := delay * s.jitter
-		delay += rand.Float64()*jitter - jitter/2 //nolint:gosec // no need for secure random here
+		// one uniform draw over the jitter range with the part above the cap cut off,
+		// so capped and near-cap delays spread below the cap instead of piling up on it
+		spread := delay * s.jitter
+		lo, hi := delay-spread/2, min(delay+spread/2, float64(limit))
+		delay = lo + rand.Float64()*(hi-lo) //nolint:gosec // no need for secure random here
 	}
 
-	// jitter can push a delay above the cap, so the cap is applied once more
 	return toDuration(delay, limit)
 }
 
