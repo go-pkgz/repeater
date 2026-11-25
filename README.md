@@ -285,4 +285,5 @@ Behavior that changed:
 - v1 `Backoff` started from 100ms when `Duration` was unset; v2 uses the initial delay as given.
 - `NewWithStrategy(n, nil)` uses a fixed 1s delay with the n attempts passed, where v1 `New(nil)` meant 10 attempts 5s apart.
 - In v1 each delay started with the attempt and ran while the function ran, and when the last attempt failed with a retryable error, `Do` waited out what was left of its delay before returning. In v2 each delay starts after a failed attempt returns, and `Do` returns right after the last attempt.
+- A v1 custom strategy decided when the first attempt ran, since `Do` waited for its first tick, and it stopped retries by closing the channel. In v2 the first attempt runs at once and `NextDelay` only returns a delay, so a v2 strategy can do neither: hold back the first call before calling `Do`, and stop retries with the attempts count, `ctx`, the errors passed to `Do` or an error classifier.
 - A v1 `Repeater` kept no state of its own and could be shared between goroutines. A v2 `Repeater` records statistics on every `Do`, so it must not be shared; create one per concurrent call.
