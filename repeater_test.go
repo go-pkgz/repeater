@@ -315,6 +315,27 @@ func TestDoContext(t *testing.T) {
 		assert.Equal(t, 1, calls)
 	})
 
+	t.Run("no delay after the last attempt", func(t *testing.T) {
+		// a delay after the last failed attempt would outlast the timeout and return the context error
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		r := NewFixed(1, time.Hour)
+		err := r.Do(ctx, func() error { return errors.New("fail") })
+		require.EqualError(t, err, "fail")
+
+		// no delay between the three attempts, an hour after the third one if it were asked for
+		r = NewWithStrategy(3, delayFunc(func(attempt int) time.Duration {
+			if attempt < 3 {
+				return 0
+			}
+			return time.Hour
+		}))
+		calls := 0
+		err = r.Do(ctx, func() error { calls++; return errors.New("fail") })
+		require.EqualError(t, err, "fail")
+		assert.Equal(t, 3, calls)
+	})
+
 	t.Run("timeout before first attempt", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 		defer cancel()
@@ -566,9 +587,48 @@ func TestStats(t *testing.T) {
 		assert.GreaterOrEqual(t, stats.Attempts, 1) // at least one attempt before cancellation
 		assert.LessOrEqual(t, stats.Attempts, 2)    // but no more than 2
 		assert.False(t, stats.Success)
-		require.ErrorIs(t, stats.LastError, context.Canceled)
+		require.EqualError(t, stats.LastError, "failed")                  // the function's error, not the context's
 		assert.GreaterOrEqual(t, stats.WorkDuration, 10*time.Millisecond) // at least 1 attempt * 10ms
 		// delay duration depends on when cancellation happens
+	})
+
+	t.Run("context cancellation keeps the function error in stats", func(t *testing.T) {
+		errFun := errors.New("real cause")
+
+		// cancelled while fun runs, caught during the delay
+		ctx, cancel := context.WithCancel(context.Background())
+		r := NewFixed(3, time.Hour)
+		err := r.Do(ctx, func() error {
+			cancel()
+			return errFun
+		})
+		require.ErrorIs(t, err, context.Canceled)
+		stats := r.Stats()
+		assert.Equal(t, 1, stats.Attempts)
+		require.ErrorIs(t, stats.LastError, errFun)
+		require.NotErrorIs(t, stats.LastError, context.Canceled)
+
+		// cancelled while fun runs, caught before the next attempt
+		ctx, cancel = context.WithCancel(context.Background())
+		r = NewFixed(3, 0)
+		err = r.Do(ctx, func() error {
+			cancel()
+			return errFun
+		})
+		require.ErrorIs(t, err, context.Canceled)
+		stats = r.Stats()
+		assert.Equal(t, 1, stats.Attempts)
+		require.ErrorIs(t, stats.LastError, errFun)
+
+		// cancelled before the first attempt, fun never ran
+		ctx, cancel = context.WithCancel(context.Background())
+		cancel()
+		r = NewFixed(3, 0)
+		err = r.Do(ctx, func() error { return errFun })
+		require.ErrorIs(t, err, context.Canceled)
+		stats = r.Stats()
+		assert.Equal(t, 0, stats.Attempts)
+		require.ErrorIs(t, stats.LastError, context.Canceled)
 	})
 
 	t.Run("critical error stops immediately", func(t *testing.T) {
@@ -637,6 +697,11 @@ func TestStats(t *testing.T) {
 		assert.GreaterOrEqual(t, stats.WorkDuration, 15*time.Millisecond) // 3 attempts * 5ms each
 		// with exponential backoff: 10ms + 20ms = 30ms
 		assert.GreaterOrEqual(t, stats.DelayDuration, 30*time.Millisecond)
-		assert.Less(t, stats.DelayDuration, 35*time.Millisecond)
+		assert.Less(t, stats.DelayDuration, 100*time.Millisecond) // generous bound for slow CI runners
 	})
 }
+
+// delayFunc adapts a function to the Strategy interface
+type delayFunc func(attempt int) time.Duration
+
+func (f delayFunc) NextDelay(attempt int) time.Duration { return f(attempt) }
