@@ -131,11 +131,11 @@ func (s backoff) NextDelay(attempt int) time.Duration {
 		delay = lo + rand.Float64()*(hi-lo) //nolint:gosec // no need for secure random here
 	}
 
-	return toDuration(delay, limit)
+	return s.toDuration(delay, limit)
 }
 
 // toDuration converts d to a time.Duration within [0, limit]
-func toDuration(d float64, limit time.Duration) time.Duration {
+func (s backoff) toDuration(d float64, limit time.Duration) time.Duration {
 	if d >= float64(limit) {
 		return limit
 	}
