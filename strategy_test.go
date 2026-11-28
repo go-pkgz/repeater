@@ -102,7 +102,7 @@ func TestBackoff(t *testing.T) {
 		initial := time.Second
 		s := newBackoff(initial, WithJitter(0.1)) // 10% jitter
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			delay := s.NextDelay(1)
 			assert.GreaterOrEqual(t, delay, 950*time.Millisecond) // initial - 5% jitter
 			assert.Less(t, delay, 1050*time.Millisecond)          // initial + 5% jitter
